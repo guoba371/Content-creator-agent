@@ -17,6 +17,13 @@ npm install
 npm run dev
 npm test
 npm run build
+npm run deploy:pages
 ```
 
 The local workspace runs at `http://127.0.0.1:5173/`.
+
+## Cloudflare Pages
+
+Production URL: `https://content-creator-agent.pages.dev/`
+
+The Pages project name is `content-creator-agent`. The deploy script builds `dist` and uploads it with Wrangler.
