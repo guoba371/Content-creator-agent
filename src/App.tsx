@@ -1,10 +1,18 @@
 import { useMemo, useState } from "react";
+import {
+  capabilityRegistry,
+  createApiProvider,
+  type ApiProvider,
+  type ProviderType,
+} from "./domain/appModel.ts";
+import { createInitialApiProviders } from "./mockData.ts";
 
 type PlatformId = "xiaohongshu" | "douyin" | "gongzhonghao" | "shipinhao" | "kuaishou";
 type ContentType = "text" | "imageText" | "video";
 type WritingMode = "article" | "shortNote" | "rewrite";
 type WritingSkillId = "content-agent" | "khazix-writer" | "guizang-ppt";
 type ImageTextMode = "cover" | "cards" | "imagePrompt" | "guizangVisual";
+type ViewMode = "creator" | "api";
 
 type Platform = {
   id: PlatformId;
@@ -31,6 +39,24 @@ type WritingSkill = {
   id: WritingSkillId;
   label: string;
   description: string;
+};
+
+type ProviderForm = {
+  name: string;
+  providerType: ProviderType;
+  baseUrl: string;
+  apiKey: string;
+  modelName: string;
+  supportedCapabilityIds: string[];
+  notes: string;
+};
+
+const providerTypeLabels: Record<ProviderType, string> = {
+  "openai-compatible": "OpenAI 兼容",
+  "image-generation": "图像生成",
+  "video-generation": "视频生成",
+  rendering: "渲染执行",
+  "skill-runner": "Skill Runner",
 };
 
 const platforms: Platform[] = [
@@ -549,6 +575,8 @@ const buildVideoPrompt = ({ platform, brief }: { platform: Platform; brief: stri
 };
 
 export function App() {
+  const initialProviders = useMemo(createInitialApiProviders, []);
+  const [viewMode, setViewMode] = useState<ViewMode>("creator");
   const [selectedPlatformId, setSelectedPlatformId] = useState<PlatformId>("xiaohongshu");
   const [selectedContentType, setSelectedContentType] = useState<ContentType>("video");
   const [brief, setBrief] = useState(defaultBrief);
@@ -559,6 +587,17 @@ export function App() {
   const [themeId, setThemeId] = useState(gzhThemes[0].id);
   const [article, setArticle] = useState(defaultArticle);
   const [copied, setCopied] = useState("");
+  const [providers, setProviders] = useState<ApiProvider[]>(initialProviders);
+  const [providerForm, setProviderForm] = useState<ProviderForm>({
+    name: "",
+    providerType: "openai-compatible",
+    baseUrl: "",
+    apiKey: "",
+    modelName: "",
+    supportedCapabilityIds: ["article.rewrite"],
+    notes: "",
+  });
+  const [adminError, setAdminError] = useState("");
 
   const platform = platformById(selectedPlatformId);
   const contentForm = formById(selectedContentType);
@@ -585,15 +624,20 @@ export function App() {
   };
 
   const beginWorkspace = () => {
+    setViewMode("creator");
     setWorkspaceStarted(true);
     if (selectedContentType === "text" && !article.trim()) {
       setArticle(articleDraft);
     }
   };
 
-  const returnToConsole = () => setWorkspaceStarted(false);
+  const returnToConsole = () => {
+    setViewMode("creator");
+    setWorkspaceStarted(false);
+  };
 
   const openContentWorkspace = (contentType: ContentType) => {
+    setViewMode("creator");
     setSelectedContentType(contentType);
     setWorkspaceStarted(true);
     if (contentType === "text" && !article.trim()) {
@@ -605,6 +649,59 @@ export function App() {
     setWritingSkillId(skillId);
     if (selectedContentType === "text" && writingMode === "rewrite") {
       setArticle(buildArticleDraft({ platform, mode: writingMode, brief, skillId }));
+    }
+  };
+
+  const changeProviderCapability = (capabilityId: string) => {
+    setProviderForm((current) => {
+      const selected = current.supportedCapabilityIds.includes(capabilityId);
+
+      return {
+        ...current,
+        supportedCapabilityIds: selected
+          ? current.supportedCapabilityIds.filter((id) => id !== capabilityId)
+          : [...current.supportedCapabilityIds, capabilityId],
+      };
+    });
+  };
+
+  const addProvider = () => {
+    setAdminError("");
+
+    if (!providerForm.name.trim() || !providerForm.baseUrl.trim() || !providerForm.apiKey.trim()) {
+      setAdminError("请填写名称、Base URL 和 API Key。");
+      return;
+    }
+
+    if (providerForm.supportedCapabilityIds.length === 0) {
+      setAdminError("至少选择一个适用能力。");
+      return;
+    }
+
+    try {
+      const provider = createApiProvider({
+        actorRole: "administrator",
+        name: providerForm.name.trim(),
+        providerType: providerForm.providerType,
+        baseUrl: providerForm.baseUrl.trim(),
+        apiKey: providerForm.apiKey.trim(),
+        modelName: providerForm.modelName.trim() || "default",
+        supportedCapabilityIds: providerForm.supportedCapabilityIds,
+        notes: providerForm.notes.trim(),
+      });
+
+      setProviders((current) => [provider, ...current]);
+      setProviderForm({
+        name: "",
+        providerType: "openai-compatible",
+        baseUrl: "",
+        apiKey: "",
+        modelName: "",
+        supportedCapabilityIds: ["article.rewrite"],
+        notes: "",
+      });
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "添加 API Provider 失败。");
     }
   };
 
@@ -621,30 +718,46 @@ export function App() {
 
         <nav className="sidebar-nav">
           <button
-            className={!workspaceStarted ? "nav-item active" : "nav-item"}
+            className={viewMode === "creator" && !workspaceStarted ? "nav-item active" : "nav-item"}
             onClick={returnToConsole}
           >
             控制台
           </button>
           <button
-            className={workspaceStarted && selectedContentType === "text" ? "nav-item active" : "nav-item"}
+            className={
+              viewMode === "creator" && workspaceStarted && selectedContentType === "text"
+                ? "nav-item active"
+                : "nav-item"
+            }
             onClick={() => openContentWorkspace("text")}
           >
             纯文字
           </button>
           <button
             className={
-              workspaceStarted && selectedContentType === "imageText" ? "nav-item active" : "nav-item"
+              viewMode === "creator" && workspaceStarted && selectedContentType === "imageText"
+                ? "nav-item active"
+                : "nav-item"
             }
             onClick={() => openContentWorkspace("imageText")}
           >
             图文
           </button>
           <button
-            className={workspaceStarted && selectedContentType === "video" ? "nav-item active" : "nav-item"}
+            className={
+              viewMode === "creator" && workspaceStarted && selectedContentType === "video"
+                ? "nav-item active"
+                : "nav-item"
+            }
             onClick={() => openContentWorkspace("video")}
           >
             视频
+          </button>
+          <button
+            className={viewMode === "api" ? "nav-item active" : "nav-item"}
+            onClick={() => setViewMode("api")}
+          >
+            后台 API
           </button>
         </nav>
 
@@ -655,34 +768,69 @@ export function App() {
         </div>
       </aside>
 
-      <section className={workspaceStarted ? "app-shell is-workspace" : "app-shell is-console"}>
+      <section
+        className={
+          viewMode === "api"
+            ? "app-shell is-admin"
+            : workspaceStarted
+              ? "app-shell is-workspace"
+              : "app-shell is-console"
+        }
+      >
         <header className="app-header">
           <div>
             <p className="eyebrow">Content Creator Agent</p>
-            <h1>自媒体内容生产控制台</h1>
+            <h1>{viewMode === "api" ? "后台 API 管理" : "自媒体内容生产控制台"}</h1>
           </div>
-          <div className="context-pill">
-            {platform.name} / {contentForm.name}
+          <div className="header-actions">
+            <nav className="view-switch" aria-label="主视图">
+              <button
+                className={viewMode === "creator" ? "active" : ""}
+                onClick={returnToConsole}
+              >
+                创作工作台
+              </button>
+              <button
+                className={viewMode === "api" ? "active" : ""}
+                onClick={() => setViewMode("api")}
+              >
+                后台 API
+              </button>
+            </nav>
+            <div className="context-pill">
+              {viewMode === "api" ? `${providers.length} 个 Provider` : `${platform.name} / ${contentForm.name}`}
+            </div>
           </div>
         </header>
 
-        {workspaceStarted ? (
-          <section className="task-summary-panel">
-            <div>
-              <strong>当前任务</strong>
-              <p>
-                {platform.name} / {contentForm.name} / {platform.fit.join(" / ")}
-                <br />
-                {brief}
-              </p>
-            </div>
-            <button className="secondary-action" onClick={returnToConsole}>
-              修改平台和形式
-            </button>
-          </section>
+        {viewMode === "api" ? (
+          <AdminApiWorkspace
+            adminError={adminError}
+            form={providerForm}
+            providers={providers}
+            onAddProvider={addProvider}
+            onCapabilityChange={changeProviderCapability}
+            onFormChange={setProviderForm}
+          />
         ) : (
-          <section className="console-panel">
-            <div className="console-copy">
+          <>
+            {workspaceStarted ? (
+              <section className="task-summary-panel">
+                <div>
+                  <strong>当前任务</strong>
+                  <p>
+                    {platform.name} / {contentForm.name} / {platform.fit.join(" / ")}
+                    <br />
+                    {brief}
+                  </p>
+                </div>
+                <button className="secondary-action" onClick={returnToConsole}>
+                  修改平台和形式
+                </button>
+              </section>
+            ) : (
+              <section className="console-panel">
+                <div className="console-copy">
               <div>
                 <p className="eyebrow">任务设置</p>
                 <h2>选择平台和内容形式</h2>
@@ -696,9 +844,9 @@ export function App() {
                   开始生成
                 </button>
               </div>
-            </div>
+                </div>
 
-            <div className="selector-block">
+                <div className="selector-block">
               <div className="block-head">
                 <span>平台</span>
                 <strong>{platform.name}</strong>
@@ -716,11 +864,11 @@ export function App() {
                     <span>{item.name}</span>
                     <small>{item.description}</small>
                   </button>
-                ))}
-              </div>
-            </div>
+                  ))}
+                </div>
+                </div>
 
-            <div className="selector-block">
+                <div className="selector-block">
               <div className="block-head">
                 <span>内容形式</span>
                 <strong>{contentForm.name}</strong>
@@ -738,19 +886,19 @@ export function App() {
                     <span>{item.name}</span>
                     <small>{item.description}</small>
                   </button>
-                ))}
-              </div>
-            </div>
+                  ))}
+                </div>
+                </div>
 
-            <label className="brief-box">
+                <label className="brief-box">
               <span>选题 / 产品 / 素材</span>
               <textarea value={brief} onChange={(event) => setBrief(event.target.value)} />
-            </label>
-          </section>
-        )}
+                </label>
+              </section>
+            )}
 
-        {workspaceStarted ? (
-          <section className="workspace-panel">
+            {workspaceStarted ? (
+              <section className="workspace-panel">
             <div className="workspace-head">
               <div>
                 <button className="back-button" onClick={returnToConsole}>
@@ -799,8 +947,10 @@ export function App() {
             {selectedContentType === "video" ? (
               <VideoWorkspace copied={copied} prompt={videoPrompt} onCopy={copyText} />
             ) : null}
-          </section>
-        ) : null}
+              </section>
+            ) : null}
+          </>
+        )}
       </section>
     </main>
   );
@@ -1018,6 +1168,140 @@ function VideoWorkspace({
         <pre>{prompt}</pre>
       </section>
     </div>
+  );
+}
+
+function AdminApiWorkspace({
+  adminError,
+  form,
+  providers,
+  onAddProvider,
+  onCapabilityChange,
+  onFormChange,
+}: {
+  adminError: string;
+  form: ProviderForm;
+  providers: ApiProvider[];
+  onAddProvider: () => void;
+  onCapabilityChange: (capabilityId: string) => void;
+  onFormChange: (value: ProviderForm) => void;
+}) {
+  return (
+    <section className="admin-api-grid">
+      <section className="admin-card">
+        <div className="admin-card-head">
+          <div>
+            <p className="eyebrow">Administrator</p>
+            <h2>添加 API Provider</h2>
+          </div>
+          <p>后台维护 Key 和模型能力，创作页只使用已启用的能力。</p>
+        </div>
+
+        {adminError ? <p className="error-message">{adminError}</p> : null}
+
+        <div className="provider-form-grid">
+          <label>
+            <span>名称</span>
+            <input
+              value={form.name}
+              placeholder="例如 APIMart 内容 API"
+              onChange={(event) => onFormChange({ ...form, name: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>类型</span>
+            <select
+              value={form.providerType}
+              onChange={(event) =>
+                onFormChange({ ...form, providerType: event.target.value as ProviderType })
+              }
+            >
+              {Object.entries(providerTypeLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Base URL</span>
+            <input
+              value={form.baseUrl}
+              placeholder="https://api.example.com/v1"
+              onChange={(event) => onFormChange({ ...form, baseUrl: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>API Key</span>
+            <input
+              value={form.apiKey}
+              placeholder="仅后台保存，前台不展示"
+              type="password"
+              onChange={(event) => onFormChange({ ...form, apiKey: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>模型名</span>
+            <input
+              value={form.modelName}
+              placeholder="例如 gpt-5-content"
+              onChange={(event) => onFormChange({ ...form, modelName: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>备注</span>
+            <input
+              value={form.notes}
+              placeholder="用途、成本、限制"
+              onChange={(event) => onFormChange({ ...form, notes: event.target.value })}
+            />
+          </label>
+        </div>
+
+        <fieldset className="capability-checks">
+          <legend>适用能力</legend>
+          {capabilityRegistry.map((capability) => (
+            <label key={capability.id} className="check-row">
+              <input
+                checked={form.supportedCapabilityIds.includes(capability.id)}
+                type="checkbox"
+                onChange={() => onCapabilityChange(capability.id)}
+              />
+              <span>{capability.name}</span>
+            </label>
+          ))}
+        </fieldset>
+
+        <button className="primary-action admin-submit" onClick={onAddProvider}>
+          添加 Provider
+        </button>
+      </section>
+
+      <section className="admin-card provider-list-card">
+        <div className="admin-card-head">
+          <div>
+            <p className="eyebrow">Provider 列表</p>
+            <h2>后台 API 能力</h2>
+          </div>
+          <p>API Key 只显示脱敏信息。新增后立即进入本页列表。</p>
+        </div>
+
+        <div className="provider-list">
+          {providers.map((provider) => (
+            <article key={provider.id} className="provider-row">
+              <div>
+                <strong>{provider.name}</strong>
+                <small>{provider.baseUrl}</small>
+              </div>
+              <span>{providerTypeLabels[provider.providerType]}</span>
+              <span>{provider.modelName}</span>
+              <span>{provider.maskedApiKey}</span>
+              <small>{provider.supportedCapabilityIds.length} 个能力</small>
+            </article>
+          ))}
+        </div>
+      </section>
+    </section>
   );
 }
 
