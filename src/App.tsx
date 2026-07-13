@@ -608,8 +608,8 @@ export function App() {
     [platform, writingMode, brief, writingSkillId],
   );
   const gzhHtml = useMemo(
-    () => buildGzhHtml(article || articleDraft, selectedTheme),
-    [article, articleDraft, selectedTheme],
+    () => buildGzhHtml(article, selectedTheme),
+    [article, selectedTheme],
   );
   const imageTextOutput = useMemo(
     () => buildImageTextOutput({ platform, mode: imageTextMode, brief }),
@@ -917,7 +917,6 @@ export function App() {
             {selectedContentType === "text" ? (
               <TextWorkspace
                 article={article}
-                articleDraft={articleDraft}
                 copied={copied}
                 gzhHtml={gzhHtml}
                 platform={platform}
@@ -958,7 +957,6 @@ export function App() {
 
 function TextWorkspace({
   article,
-  articleDraft,
   copied,
   gzhHtml,
   platform,
@@ -974,7 +972,6 @@ function TextWorkspace({
   onWritingModeChange,
 }: {
   article: string;
-  articleDraft: string;
   copied: string;
   gzhHtml: string;
   platform: Platform;
@@ -1031,7 +1028,7 @@ function TextWorkspace({
         <button className="secondary-action full" onClick={onUseDraft}>
           使用当前方式生成初稿
         </button>
-        <button className="secondary-action full" onClick={() => onCopy("article", article || articleDraft)}>
+        <button className="secondary-action full" onClick={() => onCopy("article", article)}>
           {copied === "article" ? "已复制" : "复制文章"}
         </button>
       </aside>
@@ -1045,7 +1042,7 @@ function TextWorkspace({
         </div>
         <textarea
           className="long-editor"
-          value={article || articleDraft}
+          value={article}
           onChange={(event) => onArticleChange(event.target.value)}
         />
       </section>
