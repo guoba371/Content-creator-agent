@@ -12,6 +12,7 @@ vite.config.d.ts
 .agents/
 .codex/
 design-md/
+MEMORY.md
 
 .env
 .env.*
