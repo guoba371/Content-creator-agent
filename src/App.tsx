@@ -6,6 +6,7 @@ import {
   type ProviderType,
 } from "./domain/appModel.ts";
 import { createInitialApiProviders } from "./mockData.ts";
+import { writePlainTextClipboard, writeRichHtmlClipboard } from "./clipboard.ts";
 
 type PlatformId = "xiaohongshu" | "douyin" | "gongzhonghao" | "shipinhao" | "kuaishou";
 type ContentType = "text" | "imageText" | "video";
@@ -574,26 +575,6 @@ const buildVideoPrompt = ({ platform, brief }: { platform: Platform; brief: stri
 限制词：不要低饱和、不要杂乱小字、不要虚假截图、不要真实第三方商标。`;
 };
 
-const writeClipboard = async (value: string) => {
-  try {
-    await navigator.clipboard.writeText(value);
-  } catch {
-    const textarea = document.createElement("textarea");
-    textarea.value = value;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-
-    const copied = document.execCommand("copy");
-    textarea.remove();
-
-    if (!copied) {
-      throw new Error("Unable to copy content");
-    }
-  }
-};
-
 export function App() {
   const initialProviders = useMemo(createInitialApiProviders, []);
   const [viewMode, setViewMode] = useState<ViewMode>("creator");
@@ -638,7 +619,13 @@ export function App() {
   const videoPrompt = useMemo(() => buildVideoPrompt({ platform, brief }), [platform, brief]);
 
   const copyText = async (key: string, value: string) => {
-    await writeClipboard(value);
+    await writePlainTextClipboard(value);
+    setCopied(key);
+    window.setTimeout(() => setCopied(""), 1400);
+  };
+
+  const copyRichHtml = async (key: string, html: string, plainText: string) => {
+    await writeRichHtmlClipboard(html, plainText);
     setCopied(key);
     window.setTimeout(() => setCopied(""), 1400);
   };
@@ -946,6 +933,7 @@ export function App() {
                 writingMode={writingMode}
                 onArticleChange={setArticle}
                 onCopy={copyText}
+                onCopyRichHtml={copyRichHtml}
                 onThemeChange={setThemeId}
                 onUseDraft={() => setArticle(articleDraft)}
                 onWritingSkillChange={changeWritingSkill}
@@ -986,6 +974,7 @@ function TextWorkspace({
   writingMode,
   onArticleChange,
   onCopy,
+  onCopyRichHtml,
   onThemeChange,
   onUseDraft,
   onWritingSkillChange,
@@ -1001,6 +990,7 @@ function TextWorkspace({
   writingMode: WritingMode;
   onArticleChange: (value: string) => void;
   onCopy: (key: string, value: string) => void;
+  onCopyRichHtml: (key: string, html: string, plainText: string) => void;
   onThemeChange: (value: string) => void;
   onUseDraft: () => void;
   onWritingSkillChange: (value: WritingSkillId) => void;
@@ -1056,8 +1046,8 @@ function TextWorkspace({
       <section className="editor-card">
         <div className="editor-toolbar">
           <span>文章编辑</span>
-          <button onClick={() => onCopy("gzh", gzhHtml)}>
-            {copied === "gzh" ? "已复制" : "复制公众号 HTML"}
+          <button onClick={() => onCopyRichHtml("gzh", gzhHtml, article)}>
+            {copied === "gzh" ? "已复制" : "复制公众号排版"}
           </button>
         </div>
         <textarea
@@ -1070,7 +1060,7 @@ function TextWorkspace({
       <section className="preview-card">
         <div className="editor-toolbar">
           <span>公众号排版预览</span>
-          <button onClick={() => onCopy("gzh", gzhHtml)}>
+          <button onClick={() => onCopyRichHtml("gzh", gzhHtml, article)}>
             {copied === "gzh" ? "已复制" : "复制排版"}
           </button>
         </div>
