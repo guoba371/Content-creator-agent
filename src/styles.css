@@ -807,6 +807,7 @@ textarea:focus {
   flex-wrap: wrap;
   gap: 7px;
   justify-content: flex-end;
+  margin-bottom: 10px;
 }
 
 .theme-tab {

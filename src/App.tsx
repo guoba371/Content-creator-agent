@@ -574,6 +574,26 @@ const buildVideoPrompt = ({ platform, brief }: { platform: Platform; brief: stri
 限制词：不要低饱和、不要杂乱小字、不要虚假截图、不要真实第三方商标。`;
 };
 
+const writeClipboard = async (value: string) => {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    const copied = document.execCommand("copy");
+    textarea.remove();
+
+    if (!copied) {
+      throw new Error("Unable to copy content");
+    }
+  }
+};
+
 export function App() {
   const initialProviders = useMemo(createInitialApiProviders, []);
   const [viewMode, setViewMode] = useState<ViewMode>("creator");
@@ -618,7 +638,7 @@ export function App() {
   const videoPrompt = useMemo(() => buildVideoPrompt({ platform, brief }), [platform, brief]);
 
   const copyText = async (key: string, value: string) => {
-    await navigator.clipboard.writeText(value);
+    await writeClipboard(value);
     setCopied(key);
     window.setTimeout(() => setCopied(""), 1400);
   };
@@ -1050,18 +1070,21 @@ function TextWorkspace({
       <section className="preview-card">
         <div className="editor-toolbar">
           <span>公众号排版预览</span>
-          <div className="theme-tabs">
-            {gzhThemes.map((theme) => (
-              <button
-                key={theme.id}
-                className={theme.id === themeId ? "theme-tab active" : "theme-tab"}
-                onClick={() => onThemeChange(theme.id)}
-              >
-                <span style={{ background: theme.primary }} />
-                {theme.label}
-              </button>
-            ))}
-          </div>
+          <button onClick={() => onCopy("gzh", gzhHtml)}>
+            {copied === "gzh" ? "已复制" : "复制排版"}
+          </button>
+        </div>
+        <div className="theme-tabs">
+          {gzhThemes.map((theme) => (
+            <button
+              key={theme.id}
+              className={theme.id === themeId ? "theme-tab active" : "theme-tab"}
+              onClick={() => onThemeChange(theme.id)}
+            >
+              <span style={{ background: theme.primary }} />
+              {theme.label}
+            </button>
+          ))}
         </div>
         <article
           className="wechat-preview"
